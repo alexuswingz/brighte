@@ -1,220 +1,450 @@
-# Brighte Eats API - Implementation Process
+# Brighte Eats API - Implementation Journey
 
-This document outlines the step-by-step approach taken to design, implement, and test the Brighte Eats API system, from initial setup to final deployment.
+This document traces my step-by-step implementation of the Brighte Eats API, detailing exactly how I built each component from start to finish.
 
-## 1. Project Initialization & Setup
+## Initial Project Setup
 
-### Initial Configuration
-1. **Project Scaffolding**
-   - Created directory structure for the TypeScript Node.js application
-   - Initialized package.json with `npm init`
-   - Set up TypeScript configuration in `tsconfig.json`
+I started by creating the project structure:
 
-2. **Environment Setup**
-   - Configured development environment variables in `.env`
-   - Set up database connection URL for AWS RDS PostgreSQL instance
-   - Established development, testing, and production environment distinctions
+```bash
+mkdir brighte-eats-api
+cd brighte-eats-api
+npm init -y
+```
 
-3. **Dependency Installation**
-   ```bash
-   npm install apollo-server graphql typescript prisma @prisma/client
-   npm install --save-dev ts-node nodemon jest ts-jest @types/jest
-   ```
+Next, I set up TypeScript configuration by creating `tsconfig.json`:
 
-## 2. Database Design & Implementation
+```json
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "module": "commonjs",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}
+```
 
-### Database Architecture
-1. **PostgreSQL Selection**
-   - Chose PostgreSQL for ACID compliance and robust relational capabilities
-   - Provisioned AWS RDS instance for secure cloud database hosting
+Then I installed the necessary dependencies:
 
-2. **Prisma ORM Integration**
-   - Initialized Prisma schema: `npx prisma init`
-   - Defined data models in `schema.prisma`:
-     ```prisma
-     model Lead {
-       id           Int       @id @default(autoincrement())
-       name         String
-       email        String    @unique
-       mobile       String
-       postcode     String
-       services     Service[]
-       createdAt    DateTime  @default(now()) @map("created_at")
-       updatedAt    DateTime  @updatedAt @map("updated_at")
-     
-       @@map("leads")
-     }
-     
-     enum Service {
-       DELIVERY
-       PICKUP
-       PAYMENT
-     }
-     ```
+```bash
+npm install apollo-server graphql typescript prisma @prisma/client zod
+npm install --save-dev ts-node nodemon jest ts-jest @types/jest @types/node
+```
 
-3. **Database Migration**
-   - Created initial migration: `npx prisma migrate dev --name init`
-   - Applied migration to development database
-   - Verified table creation in pgAdmin
+## Environment Configuration
 
-4. **Database Client**
-   - Created database client singleton in `src/db/client.ts`
-   - Implemented connection handling and error management
+I created a `.env` file with database configuration:
 
-## 3. GraphQL API Implementation
+```
+DATABASE_URL="postgresql://username:password@brighte-eats-db.czeyu2acgf59.ap-southeast-2.rds.amazonaws.com:5432/brighte_eats"
+```
 
-### Schema Definition
-1. **Type Definitions**
-   - Created GraphQL schema with SDL in `src/graphql/schema`
-   - Defined types for Lead, Input types, and Service enum
-   - Structured queries and mutations
+And established environment configuration in `src/config/env.ts`:
 
-2. **Resolver Implementation**
-   - Created resolver functions for queries and mutations
-   - Implemented proper error handling and validation
-   - Connected resolvers to service layer
+```typescript
+import { z } from 'zod';
 
-### Apollo Server Setup
-1. **Server Configuration**
-   - Set up Apollo Server with proper context and plugins
-   - Configured GraphQL playground for development
-   - Implemented error formatting for client-friendly responses
+// Define schema for environment variables
+const envSchema = z.object({
+  PORT: z.string().default('4000'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  DATABASE_URL: z.string().min(1, 'Database URL is required'),
+});
 
-## 4. Business Logic & Services
+// Parse environment variables
+export const env = {
+  PORT: process.env.PORT || '4000',
+  NODE_ENV: process.env.NODE_ENV || 'development',
+  DATABASE_URL: process.env.DATABASE_URL,
+};
+```
 
-### Service Layer
-1. **Lead Service**
-   - Implemented service functions for lead registration and retrieval
-   - Added data validation and business rules
-   - Created proper separation from data access layer
+## Database Setup
 
-2. **Input Validation**
-   - Implemented comprehensive validation for all user inputs
-   - Created reusable validation utilities
-   - Added custom error types for structured error handling
+First, I initialized Prisma and created the schema:
 
-## 5. Testing
+```bash
+npx prisma init
+```
 
-### Test Implementation
-1. **Unit Tests**
-   - Created unit tests for all service functions
-   - Implemented resolver tests with mock services
-   - Added validation utility tests
+Then I defined the data model in `prisma/schema.prisma`:
 
-2. **Integration Tests**
-   - Set up test database environment
-   - Implemented end-to-end GraphQL operation tests
-   - Created test data fixtures and utilities
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
 
-3. **Test Coverage**
-   - Achieved 80% code coverage
-   - Utilized Jest's coverage reports to identify gaps
-   - Prioritized critical path testing
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-## 6. Performance & Optimization
+model Lead {
+  id           Int       @id @default(autoincrement())
+  name         String
+  email        String    @unique
+  mobile       String
+  postcode     String
+  services     Service[]
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-1. **Query Optimization**
-   - Structured Prisma queries for optimal performance
-   - Implemented proper indexing in database schema
-   - Added pagination for list queries
+  @@map("leads")
+}
 
-2. **Error Handling**
-   - Created comprehensive error handling strategy
-   - Implemented structured GraphQL errors
-   - Added logging for server-side error tracking
+enum Service {
+  DELIVERY
+  PICKUP
+  PAYMENT
+}
+```
 
-## 7. Debugging & Troubleshooting
+I created and applied the database migration:
 
-When encountering the "table is empty" issue:
+```bash
+npx prisma migrate dev --name init
+```
 
-1. **Database Verification**
-   - Checked database connection in pgAdmin
-   - Verified table structure was correctly created
-   - Confirmed migrations were properly applied
+I set up the database client in `src/db/client.ts`:
 
-2. **Data Seeding**
-   - Created data seeding script in `src/scripts/seed-data.ts`:
-     ```typescript
-     import prisma from '../db/client';
-     
-     async function main() {
-       try {
-         // Clear existing data
-         await prisma.lead.deleteMany();
-         
-         // Create test lead
-         const lead = await prisma.lead.create({
-           data: {
-             name: 'Test User',
-             email: 'test@example.com',
-             mobile: '0412345678',
-             postcode: '2000',
-             services: ['DELIVERY', 'PAYMENT']
-           },
-         });
-         
-         console.log('Created test lead:', lead);
-       } catch (error) {
-         console.error('Error seeding data:', error);
-       } finally {
-         await prisma.$disconnect();
-       }
-     }
-     
-     main();
-     ```
+```typescript
+import { PrismaClient } from '@prisma/client';
 
-3. **Data Verification**
-   - Created query script in `src/scripts/query-leads.ts` to verify data:
-     ```typescript
-     import prisma from '../db/client';
-     
-     async function main() {
-       try {
-         // Query all leads
-         const leads = await prisma.lead.findMany();
-         
-         console.log('Found leads:', leads.length);
-         console.log(JSON.stringify(leads, null, 2));
-       } catch (error) {
-         console.error('Error querying leads:', error);
-       } finally {
-         await prisma.$disconnect();
-       }
-     }
-     
-     main();
-     ```
+// Create Prisma client instance
+const prisma = new PrismaClient();
 
-4. **Execution & Verification**
-   - Executed seeding script: `npx ts-node src/scripts/seed-data.ts`
-   - Confirmed data insertion with query script
-   - Verified in pgAdmin that data was properly stored
+export default prisma;
+```
 
-## 8. Version Control & Documentation
+## GraphQL Schema
 
-1. **Git Setup**
-   - Initialized Git repository
-   - Created appropriate .gitignore file
-   - Structured commits by logical components
+I created the GraphQL schema in `src/graphql/schema/schema.graphql`:
 
-2. **Documentation**
-   - Created comprehensive README.md with setup instructions
-   - Added PROJECT_ARCHITECTURE.md detailing design decisions
-   - Documented API usage with examples
+```graphql
+enum Service {
+  DELIVERY
+  PICKUP
+  PAYMENT
+}
 
-3. **GitHub Repository**
-   - Created GitHub repository at https://github.com/alexuswingz/brighte.git
-   - Pushed code with structured commit history
-   - Added detailed documentation
+type Lead {
+  id: ID!
+  name: String!
+  email: String!
+  mobile: String!
+  postcode: String!
+  services: [Service!]!
+  createdAt: String!
+  updatedAt: String!
+}
 
-## Final Result
+input RegisterLeadInput {
+  name: String!
+  email: String!
+  mobile: String!
+  postcode: String!
+  services: [Service!]!
+}
 
-The implementation resulted in a fully functional GraphQL API that:
-- Allows registration of new leads with validated input
-- Provides query capabilities for lead data
-- Maintains data integrity through validation
-- Offers comprehensive error handling
-- Follows best practices for code organization and architecture
+type Query {
+  leads: [Lead!]!
+  lead(id: ID!): Lead
+}
 
-The API meets all requirements specified in the take-home exercise and provides a solid foundation for future enhancements. 
+type Mutation {
+  register(input: RegisterLeadInput!): Lead!
+}
+```
+
+## Resolvers Implementation
+
+I implemented the resolvers in `src/graphql/resolvers/index.ts`:
+
+```typescript
+import prisma from '../../db/client';
+import { leadService } from '../../services/leadService';
+
+export const resolvers = {
+  Query: {
+    leads: async () => {
+      return await leadService.getAllLeads();
+    },
+    lead: async (_, { id }) => {
+      return await leadService.getLeadById(parseInt(id));
+    },
+  },
+  Mutation: {
+    register: async (_, { input }) => {
+      return await leadService.registerLead(input);
+    },
+  },
+};
+```
+
+## Service Layer
+
+I created the lead service in `src/services/leadService.ts`:
+
+```typescript
+import prisma from '../db/client';
+import { validateLeadInput } from '../utils/validation';
+
+export const leadService = {
+  getAllLeads: async () => {
+    return await prisma.lead.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
+  getLeadById: async (id: number) => {
+    return await prisma.lead.findUnique({
+      where: { id },
+    });
+  },
+
+  registerLead: async (input) => {
+    // Validate input
+    validateLeadInput(input);
+
+    // Check if email already exists
+    const existingLead = await prisma.lead.findUnique({
+      where: { email: input.email },
+    });
+
+    if (existingLead) {
+      throw new Error('A lead with this email already exists');
+    }
+
+    // Create new lead
+    return await prisma.lead.create({
+      data: input,
+    });
+  },
+};
+```
+
+## Validation
+
+I implemented input validation in `src/utils/validation.ts`:
+
+```typescript
+import { z } from 'zod';
+
+const serviceEnum = z.enum(['DELIVERY', 'PICKUP', 'PAYMENT']);
+
+export const leadSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email format'),
+  mobile: z.string().regex(/^\d{10}$/, 'Mobile must be a 10-digit number'),
+  postcode: z.string().regex(/^\d{4}$/, 'Postcode must be a 4-digit number'),
+  services: z.array(serviceEnum).min(1, 'At least one service must be selected'),
+});
+
+export function validateLeadInput(input) {
+  return leadSchema.parse(input);
+}
+```
+
+## Server Setup
+
+I created the main server file in `src/index.ts`:
+
+```typescript
+import { ApolloServer } from 'apollo-server';
+import { readFileSync } from 'fs';
+import { resolvers } from './graphql/resolvers';
+import { env } from './config/env';
+import path from 'path';
+
+// Load schema from file
+const typeDefs = readFileSync(
+  path.join(__dirname, 'graphql/schema/schema.graphql'),
+  'utf8'
+);
+
+// Create Apollo Server
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  introspection: true,
+  playground: env.NODE_ENV !== 'production',
+  formatError: (error) => {
+    console.error('GraphQL Error:', error);
+    return {
+      message: error.message,
+      path: error.path,
+    };
+  },
+});
+
+// Start server
+server.listen({ port: parseInt(env.PORT) }).then(({ url }) => {
+  console.log(`🚀 Server ready at ${url}`);
+});
+```
+
+## Testing Setup
+
+I configured Jest in `jest.config.js`:
+
+```javascript
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/src'],
+  transform: {
+    '^.+\\.tsx?$': 'ts-jest',
+  },
+  testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.tsx?$',
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  coverageDirectory: 'coverage',
+  collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts'],
+};
+```
+
+## Running Into Table Issues
+
+After setting up everything, I encountered an issue where the database table was empty. To debug this:
+
+1. First, I tried running Prisma Studio from the wrong directory:
+
+```bash
+PS C:\Users\User\Desktop\EXAMS> npx prisma studio
+Error: Could not find Prisma Schema that is required for this command.
+```
+
+2. I navigated to the correct directory:
+
+```bash
+PS C:\Users\User\Desktop\EXAMS> cd brighte-eats-api
+PS C:\Users\User\Desktop\EXAMS\brighte-eats-api> npx prisma studio
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+Prisma Studio is up on http://localhost:5555
+```
+
+3. Looking at the database in pgAdmin, I could see the table was created but had no data.
+
+## Creating Data Scripts
+
+To fix the empty table issue, I created two utility scripts:
+
+First, a data seeding script in `src/scripts/seed-data.ts`:
+
+```typescript
+import prisma from '../db/client';
+
+async function main() {
+  try {
+    // Clear existing data
+    await prisma.lead.deleteMany();
+    
+    // Create test lead
+    const lead = await prisma.lead.create({
+      data: {
+        name: 'Test User',
+        email: 'test@example.com',
+        mobile: '0412345678',
+        postcode: '2000',
+        services: ['DELIVERY', 'PAYMENT']
+      },
+    });
+    
+    console.log('Created test lead:', lead);
+  } catch (error) {
+    console.error('Error seeding data:', error);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+main();
+```
+
+Then, a data verification script in `src/scripts/query-leads.ts`:
+
+```typescript
+import prisma from '../db/client';
+
+async function main() {
+  try {
+    // Query all leads
+    const leads = await prisma.lead.findMany();
+    
+    console.log('Found leads:', leads.length);
+    console.log(JSON.stringify(leads, null, 2));
+  } catch (error) {
+    console.error('Error querying leads:', error);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+main();
+```
+
+I ran these scripts to populate and verify the database:
+
+```bash
+PS C:\Users\User\Desktop\EXAMS\brighte-eats-api> npx ts-node src/scripts/seed-data.ts
+Created test lead: {
+  id: 1,
+  name: 'Test User',
+  email: 'test@example.com',
+  mobile: '0412345678',
+  postcode: '2000',
+  services: [ 'DELIVERY', 'PAYMENT' ],
+  createdAt: 2025-05-13T13:00:34.202Z,
+  updatedAt: 2025-05-13T13:00:34.202Z
+}
+
+PS C:\Users\User\Desktop\EXAMS\brighte-eats-api> npx ts-node src/scripts/query-leads.ts
+Found leads: 1
+[
+  {
+    "id": 1,
+    "name": "Test User",
+    "email": "test@example.com",
+    "mobile": "0412345678",
+    "postcode": "2000",
+    "services": [
+      "DELIVERY",
+      "PAYMENT"
+    ],
+    "createdAt": "2025-05-13T13:00:34.202Z",
+    "updatedAt": "2025-05-13T13:00:34.202Z"
+  }
+]
+```
+
+## Final Documentation & Repository Setup
+
+After completing the implementation, I:
+
+1. Created README.md with setup and usage instructions
+2. Created PROJECT_ARCHITECTURE.md detailing the design decisions
+3. Set up Git repository:
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/alexuswingz/brighte.git
+git branch -M main
+git push -u origin main
+```
+
+My implementation was structured with clear separation of concerns:
+- GraphQL schema and resolvers for the API layer
+- Service layer for business logic
+- Data access layer using Prisma ORM
+- Validation and error handling
+
+The final project successfully implemented all requirements and provided a solid foundation for the Brighte Eats lead collection system. 
